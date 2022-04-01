@@ -17,9 +17,9 @@ class TransactionController extends Controller
     public function index()
     {
         //
-        $transactions = Transaction::orderBy('created_at', 'desc')->get();
-        $saldo = Transaction::orderBy('created_at', 'desc')->first('saldo');
-        $savings = Saving::orderBy('created_at', 'desc')->get();
+        $transactions = Transaction::where('username', session('username'))->orderBy('created_at', 'desc')->get();
+        $saldo = Transaction::where('username', session('username'))->orderBy('created_at', 'desc')->first('saldo');
+        $savings = Saving::where('username', session('username'))->orderBy('created_at', 'desc')->get();
 
         return view('dashboard', compact('transactions', 'saldo', 'savings'));
     }
@@ -55,7 +55,7 @@ class TransactionController extends Controller
 
         $saldo = Transaction::orderBy('created_at', 'desc')->first('saldo');
         $transaction = new Transaction;
-        $transaction->username = 'admin';
+        $transaction->username = session('username');
         $transaction->jenis_transaksi = $request->jenis_transaksi;
         $transaction->kategori = $request->kategori;
         $transaction->description = $request->description;
@@ -123,7 +123,6 @@ class TransactionController extends Controller
             SavingController::update($id, $request->nominal, $request->jenis_transaksi, $transaction->kategori, $transaction->saving_id);
         } else {
             $saldo_mula = $transaction->saldo;
-            $transaction->username = 'admin';
             $transaction->kategori = $request->kategori;
             $transaction->description = $request->description;
             switch ($transaction->jenis_transaksi) {

@@ -48,7 +48,7 @@ class SavingController extends Controller
                     if ($request->jenis_transaksi == 'keluar') {
                         return redirect('/dashboard')->with('danger', 'Saving failed');
                     }
-                    $saving->username = "admin";
+                    $saving->username = session('username');
                     $saving->saldo = $request->nominal;
                     $saving->saving_name = $request->nama_tabungan;
                     $saving->save();
@@ -69,7 +69,7 @@ class SavingController extends Controller
                 $saldo = Transaction::orderBy('created_at', 'desc')->first();
                 $transaction = new Transaction;
                 $transaction->saving_id = $saving->id;
-                $transaction->username = 'admin';
+                $transaction->username = session('username');
                 $transaction->kategori = "Tabungan $request->nama_tabungan";
                 $jenis_transaksi = "masuk";
                 if ( $request->jenis_transaksi == "masuk") {
@@ -148,7 +148,7 @@ class SavingController extends Controller
                 case 'masuk':
                     $saldo_sebelumnya = $transaction->saldo - $transaction->nominal;
                     break;
-    
+
                 default:
                     $saldo_sebelumnya = $transaction->saldo + $transaction->nominal;
                     break;
@@ -158,7 +158,7 @@ class SavingController extends Controller
                     $transaction->saldo = $saldo_sebelumnya - $request_nominal;
                     $transaction->description = "keluar uang ke tabungan $saving->saving_name";
                     break;
-    
+
                 default:
                     $transaction->saldo = $saldo_sebelumnya + $request_nominal;
                     $transaction->description = "masuk uang dari tabungan $saving->saving_name";
@@ -172,18 +172,18 @@ class SavingController extends Controller
             $transaction->nominal = $request_nominal;
             $transaction->date = $transaction->date;
             $transaction->save();
-    
+
             $transactions = Transaction::where('created_at', '>', $transaction->created_at)->get('id');
             $selisih = $saldo_mula - $transaction->saldo;
             foreach ($transactions as $row) {
                 TransactionController::saver($row->id, $selisih);
             }
-    
+
             switch ($jenis_mula) {
                 case 'masuk':
                     $saldo_saving_sebelumnya = $saving->saldo + $nominal_mula;
                     break;
-    
+
                 default:
                     $saldo_saving_sebelumnya = $saving->saldo - $nominal_mula;
                     break;
