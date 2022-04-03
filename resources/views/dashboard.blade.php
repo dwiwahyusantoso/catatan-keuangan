@@ -13,7 +13,7 @@
                 @include('layouts.header')
             </div>
             <div class="card-body bg-dark">
-                @include('transaction.create-transaction')
+                @include('layouts.create-navigation')
                 @include('transaction.index')
             </div>
         </div>

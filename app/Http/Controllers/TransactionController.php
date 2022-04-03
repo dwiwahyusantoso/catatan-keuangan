@@ -100,9 +100,12 @@ class TransactionController extends Controller
     public function edit($id)
     {
         //
+
+        $saldo = Transaction::where('username', session('username'))->orderBy('created_at', 'desc')->first('saldo');
+        $savings = Saving::where('username', session('username'))->orderBy('created_at', 'desc')->get();
         $transactions = Transaction::where('username', session('username'))->orderBy('created_at', 'desc')->get();
         $record = Transaction::find($id);
-        return view('transaction.edit-transaction', compact('record', 'transactions'));
+        return view('transaction.edit-transaction', compact('record', 'transactions', 'saldo', 'savings'));
     }
 
     /**

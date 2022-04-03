@@ -1,15 +1,22 @@
 @extends('layouts.app')
 
+@section('tittle')
+    Edit
+@endsection
+
 @section('content')
 
 <div class="row mt-3">
-    <div class="col-md-8 offset-md-2 mb-3">
+    <div class="col-md-10 offset-md-1">
         <div class="card">
             <div class="card-header bg-success">
-                Edit Transaksi
+                @include('layouts.header')
             </div>
-            <div class="card-body bg-secondary">
-                <div>
+            <div class="card-body bg-dark">
+                <div class="text-left col-md-2 offset-md-1">
+                    <mark class="bg-info px-2">Edit Transaksi</mark>
+                </div>
+                <div class="bg-secondary col-md-10 offset-md-1 py-2 px-2">
                     <form action="{{ route('update', ['id' => $record->id ])}}" method="post">
                     @csrf
                         @if (!$record->saving_id)
@@ -63,5 +70,4 @@
         </div>
     </div>
 </div>
-
 @endsection
