@@ -15,15 +15,14 @@ class RegistrationController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'firstname' => 'required',
-            'lastname' => 'required',
-            'username' => 'required',
-            'password' => 'required'
+            'firstname' => 'required|max:15',
+            'lastname' => 'required|max:15',
+            'username' => 'required|unique:users,username|min:5|max:15',
+            'password' => 'required|min:5'
         ]);
 
         $user = User::where('username',$request->username)->first();
         if ($user) {
-            session()->flash('message', 'Username already exist');
             return redirect()->back();
         }
 
@@ -35,8 +34,6 @@ class RegistrationController extends Controller
 
         $user->save();
 
-        session()->flash('message', 'Your account is created');
-
-        return redirect()->route('login');
+        return redirect()->route('login')->with('success-registration', 'Your account is created! Please login');
     }
 }

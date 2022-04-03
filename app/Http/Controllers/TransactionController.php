@@ -44,16 +44,13 @@ class TransactionController extends Controller
     public function store(StoreTransactionRequest $request)
     {
         //
-        // $request->validate([
-        //     'username' => 'required',
-        //     'jenis_transaksi' => 'required',
-        //     'kategori' => 'required',
-        //     'description' => 'required',
-        //     'nominal' => 'required',
-        //     'saldo' => 'required'
-        // ]);
+        $request->validate([
+            'jenis_transaksi' => 'required',
+            'kategori' => 'required',
+            'nominal' => 'required|numeric'
+        ]);
 
-        $saldo = Transaction::orderBy('created_at', 'desc')->first('saldo');
+        $saldo = Transaction::where('username', session('username'))->orderBy('created_at', 'desc')->first('saldo');
         $transaction = new Transaction;
         $transaction->username = session('username');
         $transaction->jenis_transaksi = $request->jenis_transaksi;
@@ -63,16 +60,24 @@ class TransactionController extends Controller
         if (!isset($saldo)){
             $transaction->saldo = $request->nominal;
         } else {
-            $transaction->saldo = $saldo->saldo - $request->nominal;
-            if ( $request->jenis_transaksi == "masuk") {
-                $transaction->saldo = $saldo->saldo + $request->nominal;
+            switch ($request->jenis_transaksi) {
+                case 'masuk':
+                    $transaction->saldo = $saldo->saldo + $request->nominal;
+                    break;
+
+                default:
+                    $transaction->saldo = $saldo->saldo - $request->nominal;
+                    break;
             }
+        }
+
+        if ($transaction->saldo < 0 or (!isset($saldo) and $request->jenis_transaksi == 'keluar')) {
+            return redirect('/dashboard')->with('error', 'Transaction failed, Not enough primary saldo');
         }
         $transaction->date = date("Y-m-d H:i:s");
         $transaction->save();
 
-        return redirect('/dashboard')
-            ->with('success', 'Transaction created successfully.');
+        return redirect('/dashboard')->with('success', 'Transaction created successfully.');
     }
 
     /**
@@ -95,7 +100,7 @@ class TransactionController extends Controller
     public function edit($id)
     {
         //
-        $transactions = Transaction::orderBy('created_at', 'desc')->get();
+        $transactions = Transaction::where('username', session('username'))->orderBy('created_at', 'desc')->get();
         $record = Transaction::find($id);
         return view('transaction.edit-transaction', compact('record', 'transactions'));
     }
@@ -110,17 +115,14 @@ class TransactionController extends Controller
     public function update(UpdateTransactionRequest $request, Transaction $transaction, $id)
     {
         //
-        // $request->validate([
-        //     'username' => 'required',
-        //     'jenis_transaksi' => 'required',
-        //     'kategori' => 'required',
-        //     'description' => 'required',
-        //     'nominal' => 'required',
-        //     'saldo' => 'required'
-        // ]);
-        $transaction = Transaction::where('id', $id)->first();
+        $request->validate([
+            'jenis_transaksi' => 'required',
+            'nominal' => 'required|numeric'
+        ]);
+
+        $transaction = Transaction::where('username', session('username'))->where('id', $id)->first();
         if ($transaction->saving_id) {
-            SavingController::update($id, $request->nominal, $request->jenis_transaksi, $transaction->kategori, $transaction->saving_id);
+            SavingController::update($id, $request->nominal, $request->jenis_transaksi, $transaction->saving_id);
         } else {
             $saldo_mula = $transaction->saldo;
             $transaction->kategori = $request->kategori;
@@ -144,16 +146,21 @@ class TransactionController extends Controller
             $transaction->jenis_transaksi = $request->jenis_transaksi;
             $transaction->nominal = $request->nominal;
             $transaction->date = $transaction->date;
+            if ($transaction->saldo < 0) {
+                return redirect('/dashboard')->with('error', 'Update failed, Not enough primary saldo');
+            }
             $transaction->save();
 
-            $transactions = Transaction::where('created_at', '>', $transaction->created_at)->get('id');
+            $transactions = Transaction::where('username', session('username'))->where('created_at', '>', $transaction->created_at)->get('id');
             $selisih = $saldo_mula - $transaction->saldo;
             foreach ($transactions as $row) {
                 $this->saver($row->id, $selisih);
             }
+
+            return redirect('/dashboard')->with('success', 'Transaction updated successfully.');
         }
 
-        return redirect('/dashboard')->with('success', 'Transaction updated successfully.');
+        return redirect('/dashboard');
     }
 
     public static function saver($id, $selisih)
@@ -174,9 +181,9 @@ class TransactionController extends Controller
         //
         $transaction = Transaction::find($id);
         if ($transaction->saving_id) {
-            SavingController::destroy($transaction->nominal, $transaction->jenis_transaksi, $transaction->kategori, $transaction->saving_id);
+            SavingController::destroy($transaction->nominal, $transaction->jenis_transaksi, $transaction->saving_id);
         }
-        $transactions = Transaction::where('created_at', '>', $transaction->created_at)->get(['id', 'nominal', 'jenis_transaksi']);
+        $transactions = Transaction::where('username', session('username'))->where('created_at', '>', $transaction->created_at)->get(['id', 'nominal', 'jenis_transaksi']);
         foreach ($transactions as $row) {
             if ($transaction->jenis_transaksi == 'masuk') {
                 $selisih = $transaction->nominal;

@@ -22,12 +22,12 @@ class LoginController extends Controller
         ]);
 
         if ( Auth::attempt($credentials)){
+            session(['username' => $request->username]);
             $request->session()->regenerate();
             return redirect()->intended('dashboard');
         }
 
-        session()->flash('message', 'Invalid username or password');
-        return redirect()->back();
+        return redirect()->back()->with('errorlogin', 'Invalid username or password');
     }
 
     public function logout(Request $request)
