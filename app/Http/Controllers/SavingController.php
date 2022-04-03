@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Saving;
 use App\Http\Requests\StoreSavingRequest;
-use App\Http\Requests\UpdateSavingRequest;
 use App\Models\Transaction;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -40,13 +39,19 @@ class SavingController extends Controller
     public function store(StoreSavingRequest $request)
     {
         //
+        $request->validate([
+            'jenis_transaksi' => 'required',
+            'nama_tabungan' => 'required',
+            'nominal' => 'required|numeric'
+        ]);
+
         try {
             DB::beginTransaction();
-                $saving = Saving::where('saving_name', $request->nama_tabungan)->orderBy('created_at', 'desc')->first();
+                $saving = Saving::where('username', session('username'))->where('saving_name', $request->nama_tabungan)->orderBy('created_at', 'desc')->first();
                 if (!$saving) {
                     $saving = new Saving;
                     if ($request->jenis_transaksi == 'keluar') {
-                        return redirect('/dashboard')->with('danger', 'Saving failed');
+                        return redirect('/dashboard')->with('error', 'Saving failed, Don\'t have savings yet');
                     }
                     $saving->username = session('username');
                     $saving->saldo = $request->nominal;
@@ -64,9 +69,12 @@ class SavingController extends Controller
                             $saving->save();
                             break;
                     }
+                    if ($saving->saldo < 0) {
+                        return redirect('/dashboard')->with('error', 'Saving failed, Not enough saving saldo');
+                    }
                 }
 
-                $saldo = Transaction::orderBy('created_at', 'desc')->first();
+                $saldo = Transaction::where('username', session('username'))->orderBy('created_at', 'desc')->first();
                 $transaction = new Transaction;
                 $transaction->saving_id = $saving->id;
                 $transaction->username = session('username');
@@ -86,7 +94,7 @@ class SavingController extends Controller
                 }
                 $transaction->date = date("Y-m-d H:i:s");
                 if ($transaction->saldo < 0) {
-                    return redirect('/dashboard')->with('danger', 'Saving failed');
+                    return redirect('/dashboard')->with('error', 'Saving failed, Not enough primary saldo');
                 }
                 $transaction->save();
 
@@ -112,7 +120,7 @@ class SavingController extends Controller
     public function show($id, $saving_name)
     {
         //
-        $transactions = Transaction::where('saving_id', $id)->orderBy('created_at', 'desc')->get();
+        $transactions = Transaction::where('username', session('username'))->where('saving_id', $id)->orderBy('created_at', 'desc')->get();
 
         return view('saving.index', compact('transactions', 'saving_name'));
     }
@@ -135,15 +143,39 @@ class SavingController extends Controller
      * @param  \App\Models\Saving  $saving
      * @return \Illuminate\Http\Response
      */
-    public static function update($id, $request_nominal, $request_jenis, $kategori, $saving_id)
+    public static function update($id, $request_nominal, $request_jenis, $saving_id)
     {
         //
         try {
-            $saving = Saving::where('id', $saving_id)->first();
-            $transaction = Transaction::where('id', $id)->first();
+            $saving = Saving::where('username', session('username'))->where('id', $saving_id)->first();
+            $transaction = Transaction::where('username', session('username'))->where('id', $id)->first();
             $saldo_mula = $transaction->saldo;
             $jenis_mula = $transaction->jenis_transaksi;
             $nominal_mula = $transaction->nominal;
+
+            switch ($jenis_mula) {
+                case 'masuk':
+                    $saldo_saving_sebelumnya = $saving->saldo + $nominal_mula;
+                    break;
+
+                default:
+                    $saldo_saving_sebelumnya = $saving->saldo - $nominal_mula;
+                    break;
+            }
+            if ( $request_jenis == 'masuk') {
+                $saving->saldo = $saldo_saving_sebelumnya + $request_nominal;
+                if ($saving->saldo < 0) {
+                    return redirect('/dashboard')->with('error', 'Saving update failed, Not enough saving saldo');
+                }
+                $saving->save();
+            } else {
+                $saving->saldo = $saldo_saving_sebelumnya - $request_nominal;
+                if ($saving->saldo < 0) {
+                    return redirect('/dashboard')->with('error', 'Saving update failed, Not enough saving saldo');
+                }
+                $saving->save();
+            }
+            
             switch ($transaction->jenis_transaksi) {
                 case 'masuk':
                     $saldo_sebelumnya = $transaction->saldo - $transaction->nominal;
@@ -171,29 +203,15 @@ class SavingController extends Controller
             $transaction->jenis_transaksi = $jenis_transaksi;
             $transaction->nominal = $request_nominal;
             $transaction->date = $transaction->date;
+            if ($transaction->saldo < 0) {
+                return redirect('/dashboard')->with('error', 'Saving update failed, Not enough primary saldo');
+            }
             $transaction->save();
 
-            $transactions = Transaction::where('created_at', '>', $transaction->created_at)->get('id');
+            $transactions = Transaction::where('username', session('username'))->where('created_at', '>', $transaction->created_at)->get('id');
             $selisih = $saldo_mula - $transaction->saldo;
             foreach ($transactions as $row) {
                 TransactionController::saver($row->id, $selisih);
-            }
-
-            switch ($jenis_mula) {
-                case 'masuk':
-                    $saldo_saving_sebelumnya = $saving->saldo + $nominal_mula;
-                    break;
-
-                default:
-                    $saldo_saving_sebelumnya = $saving->saldo - $nominal_mula;
-                    break;
-            }
-            if ( $request_jenis == 'masuk') {
-                $saving->saldo = $saldo_saving_sebelumnya + $request_nominal;
-                $saving->save();
-            } else {
-                $saving->saldo = $saldo_saving_sebelumnya - $request_nominal;
-                $saving->save();
             }
 
             DB::commit();
@@ -213,10 +231,10 @@ class SavingController extends Controller
      * @param  \App\Models\Saving  $saving
      * @return \Illuminate\Http\Response
      */
-    public static function destroy($nominal, $jenis_transaksi, $kategori, $saving_id)
+    public static function destroy($nominal, $jenis_transaksi, $saving_id)
     {
         //
-        $saving = Saving::where('id', $saving_id)->first();
+        $saving = Saving::where('username', session('username'))->where('id', $saving_id)->first();
         if ( $jenis_transaksi == 'masuk') {
             $saving->saldo += $nominal;
             $saving->save();
