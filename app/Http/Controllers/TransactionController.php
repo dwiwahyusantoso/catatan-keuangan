@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\Transaction as HelpersTransaction;
 use App\Models\Transaction;
 use App\Http\Requests\StoreTransactionRequest;
 use App\Http\Requests\UpdateTransactionRequest;
@@ -124,7 +125,7 @@ class TransactionController extends Controller
         ]);
 
         $transaction = Transaction::where('username', session('username'))->where('id', $id)->first();
-        if ($transaction->saving_id) {
+        if (isset($transaction->saving_id)) {
             SavingController::update($id, $request->nominal, $request->jenis_transaksi, $transaction->saving_id);
         } else {
             $saldo_mula = $transaction->saldo;
@@ -132,10 +133,10 @@ class TransactionController extends Controller
             $transaction->description = $request->description;
             switch ($transaction->jenis_transaksi) {
                 case 'masuk':
-                    $saldo_sebelumnya = $transaction->saldo - $transaction->nominal;
+                    $saldo_sebelumnya = $saldo_mula - $transaction->nominal;
                     break;
                 default:
-                    $saldo_sebelumnya = $transaction->saldo + $transaction->nominal;
+                    $saldo_sebelumnya = $saldo_mula + $transaction->nominal;
                     break;
             }
             switch ($request->jenis_transaksi) {
@@ -146,31 +147,27 @@ class TransactionController extends Controller
                     $transaction->saldo = $saldo_sebelumnya - $request->nominal;
                     break;
             }
+            $selisih = $saldo_mula - $transaction->saldo;
             $transaction->jenis_transaksi = $request->jenis_transaksi;
             $transaction->nominal = $request->nominal;
             $transaction->date = $transaction->date;
-            if ($transaction->saldo < 0) {
-                return redirect('/dashboard')->with('error', 'Update failed, Not enough primary saldo');
+            $transactions = Transaction::where('username', session('username'))->where('created_at', '>', $transaction->created_at)->get('id');
+            foreach ($transactions as $row) {
+                $check_saldo = HelpersTransaction::checker( $row->id, $selisih );
+                if ($check_saldo < 0) {
+                    return redirect('/dashboard')->with('error', 'Update failed, There are transaction have negatif saldo');
+                }
+            }
+            foreach ($transactions as $row) {
+                HelpersTransaction::saver( $row->id, $selisih );
             }
             $transaction->save();
 
-            $transactions = Transaction::where('username', session('username'))->where('created_at', '>', $transaction->created_at)->get('id');
-            $selisih = $saldo_mula - $transaction->saldo;
-            foreach ($transactions as $row) {
-                $this->saver($row->id, $selisih);
-            }
 
             return redirect('/dashboard')->with('success', 'Transaction updated successfully.');
         }
 
         return redirect('/dashboard');
-    }
-
-    public static function saver($id, $selisih)
-    {
-        $transaction = Transaction::where('id', $id)->first();
-        $transaction->saldo -= $selisih;
-        $transaction->save();
     }
 
     /**
@@ -183,20 +180,34 @@ class TransactionController extends Controller
     {
         //
         $transaction = Transaction::find($id);
-        if ($transaction->saving_id) {
-            SavingController::destroy($transaction->nominal, $transaction->jenis_transaksi, $transaction->saving_id);
-        }
-        $transactions = Transaction::where('username', session('username'))->where('created_at', '>', $transaction->created_at)->get(['id', 'nominal', 'jenis_transaksi']);
-        foreach ($transactions as $row) {
-            if ($transaction->jenis_transaksi == 'masuk') {
-                $selisih = $transaction->nominal;
-            } else {
-                $selisih = -$transaction->nominal;
+        if ( isset($transaction->saving_id) ) {
+            SavingController::destroy($transaction->nominal, $transaction->jenis_transaksi, $transaction->saving_id, $transaction->id);
+        } else {
+            switch ( $transaction->jenis_transaksi ) {
+                case 'masuk':
+                    $selisih = $transaction->nominal;
+                    break;
+
+                default:
+                    $selisih = -$transaction->nominal;
+                    break;
             }
 
-            $this->saver($row->id, $selisih);
+            $transactions = Transaction::where('username', session('username'))->where('created_at', '>', $transaction->created_at)->get('id');
+            foreach ($transactions as $row) {
+                $check_saldo = HelpersTransaction::checker( $row->id, $selisih );
+                if ($check_saldo < 0) {
+                    return redirect('/dashboard')->with('error', 'Delete failed, There are transaction have negatif saldo');
+                }
+            }
+
+            foreach ($transactions as $row) {
+                HelpersTransaction::saver( $row->id, $selisih );
+            }
+            $transaction->delete();
+            return redirect('/dashboard')->with('success', 'Deleted transaction successfully');
         }
-        $transaction->delete();
-        return redirect('/dashboard')->with('danger', 'Transaction deleted successfully.');
+
+        return redirect('/dashboard');
     }
 }
