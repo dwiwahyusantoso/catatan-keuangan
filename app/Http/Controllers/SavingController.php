@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\Transaction as HelpersTransaction;
 use App\Models\Saving;
 use App\Http\Requests\StoreSavingRequest;
 use App\Models\Transaction;
@@ -108,7 +109,7 @@ class SavingController extends Controller
             ], 500);
         }
 
-        return redirect('/dashboard')->with('success', 'Saving successfully');;
+        return redirect('/dashboard')->with('success', 'Saving created successfully');;
     }
 
     /**
@@ -162,29 +163,30 @@ class SavingController extends Controller
                     $saldo_saving_sebelumnya = $saving->saldo - $nominal_mula;
                     break;
             }
-            if ( $request_jenis == 'masuk') {
-                $saving->saldo = $saldo_saving_sebelumnya + $request_nominal;
-                if ($saving->saldo < 0) {
-                    return redirect('/dashboard')->with('error', 'Saving update failed, Not enough saving saldo');
-                }
-                $saving->save();
-            } else {
-                $saving->saldo = $saldo_saving_sebelumnya - $request_nominal;
-                if ($saving->saldo < 0) {
-                    return redirect('/dashboard')->with('error', 'Saving update failed, Not enough saving saldo');
-                }
-                $saving->save();
-            }
-            
-            switch ($transaction->jenis_transaksi) {
+            switch ( $request_jenis ) {
                 case 'masuk':
-                    $saldo_sebelumnya = $transaction->saldo - $transaction->nominal;
+                    $saving->saldo = $saldo_saving_sebelumnya + $request_nominal;
                     break;
 
                 default:
-                    $saldo_sebelumnya = $transaction->saldo + $transaction->nominal;
+                    $saving->saldo = $saldo_saving_sebelumnya - $request_nominal;
                     break;
             }
+
+            if ($saving->saldo < 0) {
+                return redirect('/dashboard')->with('error', 'Saving update failed, Not enough saving saldo');
+            }
+
+            switch ($transaction->jenis_transaksi) {
+                case 'masuk':
+                    $saldo_sebelumnya = $saldo_mula - $transaction->nominal;
+                    break;
+
+                default:
+                    $saldo_sebelumnya = $saldo_mula + $transaction->nominal;
+                    break;
+            }
+
             switch ($request_jenis) {
                 case 'masuk':
                     $transaction->saldo = $saldo_sebelumnya - $request_nominal;
@@ -200,19 +202,29 @@ class SavingController extends Controller
             if ( $request_jenis == "masuk") {
                 $jenis_transaksi = "keluar";
             }
+
             $transaction->jenis_transaksi = $jenis_transaksi;
             $transaction->nominal = $request_nominal;
             $transaction->date = $transaction->date;
-            if ($transaction->saldo < 0) {
+
+            if ( $transaction->saldo < 0 ) {
                 return redirect('/dashboard')->with('error', 'Saving update failed, Not enough primary saldo');
             }
-            $transaction->save();
 
-            $transactions = Transaction::where('username', session('username'))->where('created_at', '>', $transaction->created_at)->get('id');
             $selisih = $saldo_mula - $transaction->saldo;
+            $transactions = Transaction::where('username', session('username'))->where('created_at', '>', $transaction->created_at)->get('id');
             foreach ($transactions as $row) {
-                TransactionController::saver($row->id, $selisih);
+                $check_saldo = HelpersTransaction::checker( $row->id, $selisih );
+                if ($check_saldo < 0) {
+                    return redirect('/dashboard')->with('error', 'Update failed, There are transaction have negatif saldo');
+                }
             }
+            foreach ($transactions as $row) {
+                HelpersTransaction::saver( $row->id, $selisih );
+            }
+
+            $transaction->save();
+            $saving->save();
 
             DB::commit();
         } catch (\Exception$e) {
@@ -231,19 +243,44 @@ class SavingController extends Controller
      * @param  \App\Models\Saving  $saving
      * @return \Illuminate\Http\Response
      */
-    public static function destroy($nominal, $jenis_transaksi, $saving_id)
+    public static function destroy($nominal, $jenis_transaksi, $saving_id, $transaction_id)
     {
         //
         $saving = Saving::where('username', session('username'))->where('id', $saving_id)->first();
-        if ( $jenis_transaksi == 'masuk') {
-            $saving->saldo += $nominal;
-            $saving->save();
+        $saldo_mula = $saving->saldo;
+        $transaction = Transaction::where('username', session('username'))->where('id', $transaction_id)->first();
+
+        switch ( $jenis_transaksi ) {
+            case 'masuk':
+                $saving->saldo += $nominal;
+                break;
+
+            default:
+                $saving->saldo -= $nominal;
+                break;
+        }
+        $selisih = $saldo_mula - $saving->saldo;
+
+        if ( $saving->saldo < 0 ) {
+            return redirect('/dashboard')->with('error', 'Can\'t delete this saving. Saldo must positif');
         } else {
-            $saving->saldo -= $nominal;
+            $transactions = Transaction::where('username', session('username'))->where('created_at', '>', $transaction->created_at)->get('id');
+            foreach ($transactions as $row) {
+                $check_saldo = HelpersTransaction::checker( $row->id, $selisih );
+                if ($check_saldo < 0) {
+                    return redirect('/dashboard')->with('error', 'Delete failed, There are transaction have negatif saldo');
+                }
+            }
+            foreach ($transactions as $row) {
+                HelpersTransaction::saver( $row->id, $selisih );
+            }
             $saving->save();
+            $transaction->delete();
         }
         if ($saving->saldo == 0){
             $saving->delete();
         }
+
+        return redirect('/dashboard')->with('danger', 'Saving deleted successfully');
     }
 }

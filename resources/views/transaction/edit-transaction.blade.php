@@ -19,6 +19,7 @@
                 <div class="bg-secondary col-md-10 offset-md-1 py-2 px-2">
                     <form action="{{ route('update', ['id' => $record->id ])}}" method="post">
                     @csrf
+
                         @if (!$record->saving_id)
                             <div class="mb-3">
                                 <label for="kategori" class="form-label mb-0">Kategori Transaksi</label>
@@ -35,6 +36,7 @@
                                 @enderror
                             </div>
                         @endif
+
                         <div class="mb-3">
                             <label for="jenis_transaksi" class="form-label mb-0">Jenis Trsansaksi</label>
                             <select class="form-select form-select-sm mt-0 @error('jenis_transaksi') is-invalid @enderror" id="jenis_transaksi" name="jenis_transaksi">
@@ -48,6 +50,7 @@
                             </div>
                             @enderror
                         </div>
+
                         <div class="mb-3">
                             <label for="nominal" class="form-label mb-0">Nominal</label>
                             <input type="text" class="form-control mt-0 @error('nominal') is-invalid @enderror" id="nominal" name="nominal" value="{{$record->nominal}}">
@@ -57,12 +60,14 @@
                             </div>
                             @enderror
                         </div>
+
                         @if (!$record->saving_id)
-                        <div class="mb-3">
-                            <label for="description" class="form-label mb-0">Deskripsi</label>
-                            <textarea class="form-control mt-0" id="description" name="description" value="{{$record->description}}"></textarea>
-                        </div>
+                            <div class="mb-3">
+                                <label for="description" class="form-label mb-0">Deskripsi</label>
+                                <textarea class="form-control mt-0" id="description" name="description">{{$record->description}}</textarea>
+                            </div>
                         @endif
+
                         <button type="submit" class="btn btn-primary">Submit</button>
                     </form>
                 </div>
